@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sınıf Listesi ve Artı/Eksi Takibi</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--tx:#1d2330;--mut:#6b7385;--bd:#dfe3ea;--pri:#2f5bea;--ok:#168a4a;--no:#c62f3c}
+@media (prefers-color-scheme:dark){:root{--bg:#14171d;--card:#1d222b;--tx:#e8ebf2;--mut:#98a1b3;--bd:#2d3442;--pri:#6f93ff;--ok:#43c47a;--no:#ff6b78}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 system-ui,Segoe UI,Roboto,sans-serif}
+header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 16px;background:var(--card);border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:5}
+h1{font-size:17px;margin:0 8px 0 0}
+main{max-width:900px;margin:0 auto;padding:16px}
+button,select,input,textarea{font:inherit;color:inherit}
+button{border:1px solid var(--bd);background:var(--card);padding:7px 12px;border-radius:8px;cursor:pointer}
+button:hover{border-color:var(--pri)}
+.pri{background:var(--pri);color:#fff;border-color:var(--pri)}
+select,input,textarea{border:1px solid var(--bd);background:var(--card);padding:7px 10px;border-radius:8px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.bar .sp{flex:1}
+.sum{color:var(--mut);font-size:13px}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--bd);border-radius:10px;overflow:hidden}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--bd)}
+th{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+tr:last-child td{border-bottom:0}
+.sc{font-weight:700;font-size:17px;text-align:center;min-width:44px}
+.pos{color:var(--ok)}.neg{color:var(--no)}
+.pm{width:42px;font-size:18px;font-weight:700;padding:4px 0}
+.pm.p{color:var(--ok)}.pm.m{color:var(--no)}
+.nm{cursor:pointer}.nm:hover{text-decoration:underline}
+.tn td{background:rgba(198,47,60,.16)}
+.tn td:first-child{box-shadow:inset 4px 0 0 var(--no)}
+.empty{text-align:center;padding:48px 16px;color:var(--mut)}
+dialog{border:1px solid var(--bd);border-radius:12px;background:var(--card);color:var(--tx);padding:18px;width:min(480px,94vw)}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+dialog label{display:block;margin:10px 0 4px;font-size:13px;color:var(--mut)}
+dialog input,dialog textarea{width:100%}
+.row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+.log{max-height:120px;overflow:auto;font-size:12px;color:var(--mut);margin-top:6px}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:8px 14px;border-radius:8px;opacity:0;transition:.2s;pointer-events:none}
+#toast.on{opacity:1}
+@media (max-width:560px){.hide-s{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Sınıf Takip</h1>
+  <select id="cls" title="Sınıf seç"></select>
+  <button id="bImp" class="pri">+ Liste yükle</button>
+  <span class="sp" style="flex:1"></span>
+    <p>Geliştirici: <span class="text-slate-300 font-semibold">Barış Mantaş</span></p>
+  <button id="bSync" title="E-Tablolar bağlantısı">☁ Bağlan</button>
+  <button id="bBak" title="Tüm verileri yedekle / geri yükle">Yedek</button>
+</header>
+<main id="app"></main>
+
+<dialog id="dImp">
+  <h3 style="margin:0 0 4px">Sınıf listesi yükle</h3>
+  <label>Excel dosyası (.xls / .xlsx / .csv)</label>
+  <input type="file" id="fFile" accept=".xls,.xlsx,.csv">
+  <label>veya Excel’den kopyalayıp buraya yapıştır</label>
+  <textarea id="tPaste" rows="4" placeholder="Sıra, Okul No, Ad Soyad sütunlarını kopyala"></textarea>
+  <label>Sınıf adı (örn. 12-A)</label>
+  <input id="iCls" placeholder="12-A">
+  <div id="impInfo" class="sum" style="margin-top:8px"></div>
+  <div class="row"><button id="impCancel">Vazgeç</button><button id="impOk" class="pri">Aktar</button></div>
+</dialog>
+
+<dialog id="dSt">
+  <h3 id="stTitle" style="margin:0 0 4px">Öğrenci</h3>
+  <label>Okul numarası</label><input id="eNo" inputmode="numeric">
+  <label>Ad Soyad</label><input id="eName">
+  <div style="display:flex;gap:8px">
+    <div style="flex:1"><label>Artı sayısı</label><input id="eP" type="number" min="0"></div>
+    <div style="flex:1"><label>Eksi sayısı</label><input id="eM" type="number" min="0"></div>
+  </div>
+  <div id="eLog" class="log"></div>
+  <div class="row">
+    <button id="stDel" style="margin-right:auto;color:var(--no)">Sil</button>
+    <button id="stCancel">Vazgeç</button><button id="stOk" class="pri">Kaydet</button>
+  </div>
+</dialog>
+
+<dialog id="dBak">
+  <h3 style="margin:0 0 8px">Yedek</h3>
+  <p class="sum">Veriler bu tarayıcıda saklanır. Başka bilgisayara taşımak için yedek al, orada geri yükle.</p>
+  <div class="row" style="justify-content:flex-start">
+    <button id="bkOut">Yedeği indir</button>
+    <button id="bkIn">Yedeği yükle</button>
+    <input type="file" id="fBak" accept=".json" hidden>
+  </div>
+  <div class="row"><button id="bkClose">Kapat</button></div>
+</dialog>
+
+<dialog id="dSync">
+  <h3 style="margin:0 0 4px">E-Tablolar bağlantısı</h3>
+  <p class="sum">Apps Script web uygulamasının adresini ve tabloya yazdığın şifreyi gir. Aynı bilgileri başka cihazda da girersen veriler ortak olur.</p>
+  <label>Web uygulaması URL’si</label><input id="cUrl" placeholder="https://script.google.com/macros/s/.../exec">
+  <label>Şifre</label><input id="cKey" type="password">
+  <div id="cInfo" class="sum" style="margin-top:8px"></div>
+  <div class="row"><button id="cOff" style="margin-right:auto">Bağlantıyı kaldır</button><button id="cCancel">Vazgeç</button><button id="cOk" class="pri">Bağlan</button></div>
+</dialog>
+
+<div id="toast"></div>
+<script>
+const KEY = 'sinifTakip_v1';
+let S = { classes: {}, active: '' };
+try { const r = JSON.parse(localStorage.getItem(KEY)); if (r && r.classes) S = r; } catch (e) {}
+let sortBy = 'no', q = '', editId = null, pending = [];
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('Kaydedilemedi!'); } }
+function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), 1800); }
+const cur = () => S.classes[S.active];
+const score = s => (s.p || 0) - (s.m || 0);
+const fmt = n => (n > 0 ? '+' : '') + n;
+const negToday = s => { const d = new Date().toDateString(); return (s.log || []).some(l => l[1] < 0 && new Date(l[0]).toDateString() === d); };
+
+/* ---------- Ekran ---------- */
+function render() {
+  const names = Object.keys(S.classes).sort((a, b) => a.localeCompare(b, 'tr', { numeric: true }));
+  if (!S.classes[S.active]) S.active = names[0] || '';
+  $('cls').innerHTML = names.map(n => `<option ${n === S.active ? 'selected' : ''}>${esc(n)}</option>`).join('');
+  $('cls').style.display = names.length ? '' : 'none';
+  const app = $('app');
+  const c = cur();
+  if (!c) { app.innerHTML = '<div class="empty">Henüz sınıf yok.<br>“+ Liste yükle” ile e-Okul’dan aldığın Excel dosyasını yükle.</div>'; return; }
+  let list = c.students.slice();
+  const t = q.trim().toLocaleLowerCase('tr');
+  if (t) list = list.filter(s => s.name.toLocaleLowerCase('tr').includes(t) || String(s.no).includes(t));
+  list.sort((a, b) => sortBy === 'puan' ? score(b) - score(a) || (+a.no - +b.no)
+    : sortBy === 'ad' ? a.name.localeCompare(b.name, 'tr') : (+a.no - +b.no) || a.name.localeCompare(b.name, 'tr'));
+  const P = c.students.reduce((x, s) => x + (s.p || 0), 0), M = c.students.reduce((x, s) => x + (s.m || 0), 0);
+  app.innerHTML = `
+    <div class="bar">
+      <input id="qs" placeholder="Ara (ad veya numara)" value="${esc(q)}" style="flex:1;min-width:140px">
+      <select id="srt"><option value="no">Numaraya göre</option><option value="ad">Ada göre</option><option value="puan">Puana göre</option></select>
+    </div>
+    <div class="bar">
+      <span class="sum">${c.students.length} öğrenci · toplam ${P} artı, ${M} eksi</span><span class="sp"></span>
+      <button data-a="add">+ Öğrenci ekle</button>
+      <button data-a="csv">Listeyi indir</button>
+      <button data-a="ren">Sınıfı yeniden adlandır</button>
+      <button data-a="delc" style="color:var(--no)">Sınıfı sil</button>
+    </div>
+    <table><thead><tr><th>No</th><th>Ad Soyad</th><th></th><th style="text-align:center">Puan</th><th></th></tr></thead><tbody>
+    ${list.map(s => { const v = score(s); return `<tr class="${negToday(s) ? 'tn' : ''}">
+      <td>${esc(s.no)}</td>
+      <td class="nm" data-a="edit" data-id="${s.id}">${esc(s.name)}<div class="sum hide-s">+${s.p || 0} / −${s.m || 0}</div></td>
+      <td style="white-space:nowrap"><button class="pm m" data-a="m" data-id="${s.id}">−</button> <button class="pm p" data-a="p" data-id="${s.id}">+</button></td>
+      <td class="sc ${v > 0 ? 'pos' : v < 0 ? 'neg' : ''}">${fmt(v)}</td>
+      <td><button data-a="edit" data-id="${s.id}" title="Düzenle">✎</button></td></tr>`; }).join('') || '<tr><td colspan="5" class="empty">Sonuç yok</td></tr>'}
+    </tbody></table>`;
+  $('srt').value = sortBy;
+}
+
+/* ---------- Olaylar ---------- */
+$('cls').onchange = e => { S.active = e.target.value; save(); render(); };
+document.addEventListener('input', e => {
+  if (e.target.id === 'qs') { q = e.target.value; const p = e.target.selectionStart; render(); const n = $('qs'); n.focus(); n.setSelectionRange(p, p); }
+});
+document.addEventListener('change', e => { if (e.target.id === 'srt') { sortBy = e.target.value; render(); } });
+$('app').addEventListener('click', e => {
+  const b = e.target.closest('[data-a]'); if (!b) return;
+  const a = b.dataset.a, c = cur(), s = c && c.students.find(x => x.id === b.dataset.id);
+  if (a === 'p' || a === 'm') {
+    const t0 = Date.now(); s[a] = (s[a] || 0) + 1; (s.log = s.log || []).push([t0, a === 'p' ? 1 : -1]);
+    sync({ op: 'inc', id: s.id, f: a, t: t0 }); save(); render();
+  } else if (a === 'edit') openSt(s);
+  else if (a === 'add') openSt(null);
+  else if (a === 'csv') exportCsv();
+  else if (a === 'ren') {
+    const n = (prompt('Yeni sınıf adı:', S.active) || '').trim();
+    if (!n || n === S.active) return;
+    if (S.classes[n]) return toast('Bu adda sınıf var');
+    sync({ op: 'rename', from: S.active, to: n });
+    S.classes[n] = c; delete S.classes[S.active]; S.active = n; save(); render();
+  } else if (a === 'delc') {
+    if (confirm(`${S.active} sınıfı ve tüm puanları silinsin mi?`)) { sync({ op: 'delClass', cls: S.active }); delete S.classes[S.active]; save(); render(); }
+  }
+});
+
+/* ---------- Öğrenci düzenleme ---------- */
+function openSt(s) {
+  editId = s ? s.id : null;
+  $('stTitle').textContent = s ? 'Öğrenciyi güncelle' : 'Öğrenci ekle';
+  $('eNo').value = s ? s.no : ''; $('eName').value = s ? s.name : '';
+  $('eP').value = s ? s.p || 0 : 0; $('eM').value = s ? s.m || 0 : 0;
+  $('stDel').style.visibility = s ? 'visible' : 'hidden';
+  $('eLog').innerHTML = s && s.log && s.log.length ? 'Son işlemler: ' + s.log.slice(-10).reverse().map(l =>
+    `${new Date(l[0]).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} ${l[1] > 0 ? '+1' : '−1'}`).join(' · ') : '';
+  $('dSt').showModal();
+}
+$('stCancel').onclick = () => $('dSt').close();
+$('stOk').onclick = () => {
+  const name = $('eName').value.trim(), no = $('eNo').value.trim();
+  if (!name) return toast('Ad Soyad gerekli');
+  const c = cur(), p = Math.max(0, +$('eP').value || 0), m = Math.max(0, +$('eM').value || 0);
+  let st;
+  if (editId) { st = c.students.find(x => x.id === editId); Object.assign(st, { name, no, p, m }); }
+  else { st = { id: uid(), no, name, p, m, log: [] }; c.students.push(st); }
+  sync({ op: 'set', id: st.id, cls: S.active, no, name, p, m });
+  save(); $('dSt').close(); render();
+};
+$('stDel').onclick = () => {
+  if (!confirm('Öğrenci silinsin mi?')) return;
+  const c = cur(); sync({ op: 'del', id: editId }); c.students = c.students.filter(x => x.id !== editId);
+  save(); $('dSt').close(); render();
+};
+
+/* ---------- Excel içe aktarma ---------- */
+// Her satırda: ad soyad (harfli metin) + ondan önceki sayısal hücre = okul numarası. Diğer sütunlar yok sayılır.
+function parseRows(rows) {
+  const out = [], isNum = v => /^\d+$/.test(String(v).trim());
+  for (const r of rows) {
+    const cells = r.map(c => (c == null ? '' : c));
+    const ni = cells.findIndex(c => typeof c === 'string' && c.trim().length > 3 && /[A-Za-zÇĞİÖŞÜçğıöşü]{2,}/.test(c));
+    if (ni < 1) continue;
+    let j = ni - 1; while (j >= 0 && cells[j] === '') j--;
+    if (j < 0 || !isNum(cells[j])) continue;
+    out.push({ no: String(cells[j]).trim(), name: cells[ni].replace(/\s+/g, ' ').trim() });
+  }
+  return out;
+}
+function setPending(rows, hint) {
+  pending = parseRows(rows);
+  $('impInfo').textContent = pending.length ? `${pending.length} öğrenci bulundu.` : 'Öğrenci satırı bulunamadı.';
+  if (hint && !$('iCls').value) { const m = hint.match(/\d{1,2}\s*[-\/]\s*[A-Za-zÇĞİÖŞÜ]\b/); if (m) $('iCls').value = m[0].replace(/\s/g, '').toUpperCase(); }
+}
+$('bImp').onclick = () => { pending = []; $('fFile').value = ''; $('tPaste').value = ''; $('iCls').value = S.active && false || ''; $('impInfo').textContent = ''; $('dImp').showModal(); };
+$('impCancel').onclick = () => $('dImp').close();
+$('fFile').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    if (typeof XLSX === 'undefined') throw new Error('xlsx');
+    const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: '' });
+    setPending(rows, f.name);
+  } catch (err) { $('impInfo').textContent = 'Dosya okunamadı (internet gerekebilir). Excel’den kopyalayıp yapıştırmayı dene.'; }
+};
+$('tPaste').oninput = e => setPending(e.target.value.split(/\r?\n/).map(l => l.split('\t')), '');
+$('impOk').onclick = () => {
+  const n = $('iCls').value.trim();
+  if (!pending.length) return toast('Önce liste yükle veya yapıştır');
+  if (!n) return toast('Sınıf adı yaz');
+  const c = S.classes[n] || (S.classes[n] = { students: [] });
+  let add = 0, upd = 0; const ops = [];
+  for (const p of pending) {
+    const ex = c.students.find(s => String(s.no) === p.no);
+    if (ex) { ex.name = p.name; upd++; ops.push({ op: 'set', id: ex.id, cls: n, no: p.no, name: p.name }); }
+    else { const st = { id: uid(), no: p.no, name: p.name, p: 0, m: 0, log: [] }; c.students.push(st); add++; ops.push({ op: 'set', id: st.id, cls: n, no: p.no, name: p.name, p: 0, m: 0 }); }
+  }
+  sync(...ops);
+  S.active = n; save(); $('dImp').close(); render();
+  toast(`${add} eklendi, ${upd} güncellendi (puanlar korundu)`);
+};
+
+/* ---------- Dışa aktarma / yedek ---------- */
+function download(name, text, type) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+function exportCsv() {
+  const c = cur(), rows = [['Okul No', 'Ad Soyad', 'Artı', 'Eksi', 'Puan']].concat(
+    c.students.slice().sort((a, b) => +a.no - +b.no).map(s => [s.no, s.name, s.p || 0, s.m || 0, score(s)]));
+  download(`${S.active}.csv`, '\uFEFF' + rows.map(r => r.join(';')).join('\r\n'), 'text/csv;charset=utf-8');
+}
+$('bBak').onclick = () => $('dBak').showModal();
+$('bkClose').onclick = () => $('dBak').close();
+$('bkOut').onclick = () => download(`sinif-yedek-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(S), 'application/json');
+$('bkIn').onclick = () => $('fBak').click();
+$('fBak').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const d = JSON.parse(await f.text()); if (!d.classes) throw 0;
+    if (!confirm('Mevcut veriler yedekteki verilerle değiştirilsin mi?')) return;
+    S = d; sync({ op: 'replaceAll', classes: S.classes }); save(); $('dBak').close(); render(); toast('Yedek yüklendi');
+  } catch (err) { toast('Geçersiz yedek dosyası'); }
+};
+/* ---------- E-Tablolar senkronu ---------- */
+let CFG = { url: '', key: '' }, Q = [], busy = false;
+try { CFG = JSON.parse(localStorage.getItem(KEY + '_cfg')) || CFG; Q = JSON.parse(localStorage.getItem(KEY + '_q')) || []; } catch (e) {}
+const saveQ = () => { try { localStorage.setItem(KEY + '_q', JSON.stringify(Q)); } catch (e) {} };
+const saveCfg = () => { try { localStorage.setItem(KEY + '_cfg', JSON.stringify(CFG)); } catch (e) {} };
+const setSt = t => { $('bSync').textContent = t; };
+const idle = () => CFG.url ? '☁ Senkron' : '☁ Bağlan';
+async function call(ops) {
+  const res = await fetch(CFG.url, { method: 'POST', body: JSON.stringify({ key: CFG.key, ops }) });
+  const r = await res.json(); if (!r.ok) throw new Error(r.err || 'hata'); return r.data;
+}
+function sync(...ops) { if (!CFG.url) return; Q.push(...ops); saveQ(); flush(); }
+async function flush() {
+  if (!CFG.url || busy) return;
+  busy = true; setSt('⟳ Kaydediliyor…');
+  try {
+    const ops = Q.slice(), d = await call(ops);
+    Q.splice(0, ops.length); saveQ();
+    const open = document.querySelector('dialog[open]'), act = document.activeElement;
+    if (!Q.length && !open && !(act && act.id === 'qs') && JSON.stringify(d.classes) !== JSON.stringify(S.classes)) { S.classes = d.classes; save(); render(); }
+    setSt(idle());
+  } catch (e) { setSt('⚠ Bağlantı yok'); }
+  busy = false;
+  if (Q.length) flush();
+}
+$('bSync').onclick = () => { $('cUrl').value = CFG.url; $('cKey').value = CFG.key; $('cInfo').textContent = ''; $('dSync').showModal(); };
+$('cCancel').onclick = () => $('dSync').close();
+$('cOff').onclick = () => { CFG = { url: '', key: '' }; Q = []; saveCfg(); saveQ(); setSt(idle()); $('dSync').close(); };
+$('cOk').onclick = async () => {
+  const old = CFG, url = $('cUrl').value.trim(), key = $('cKey').value;
+  if (!url) return toast('URL gerekli');
+  $('cInfo').textContent = 'Bağlanılıyor…'; CFG = { url, key };
+  try {
+    const d = await call([]), remote = Object.keys(d.classes || {}).length, local = Object.keys(S.classes).length;
+    if (remote) {
+      if (local && !confirm('Tablodaki veriler kullanılacak, bu cihazdaki liste bunlarla değiştirilecek. Devam edilsin mi?')) { CFG = old; return; }
+      S.classes = d.classes; Q = [];
+    } else if (local) Q = [{ op: 'replaceAll', classes: S.classes }];
+    saveCfg(); saveQ(); save(); $('dSync').close(); setSt(idle()); render(); flush();
+  } catch (e) { CFG = old; $('cInfo').textContent = 'Bağlanılamadı: ' + e.message; }
+};
+setInterval(flush, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) flush(); });
+setSt(idle()); flush();
+render();
+</script>
+</body>
+</html>
